@@ -9,25 +9,16 @@
 /* More information about these options at jshint.com/docs/options */
 /* jshint browser: true, camelcase: true, curly: true, devel: true, eqeqeq: true, forin: false, globalstrict: true, quotmark: single, undef: true, unused: strict */
 
-
-// https://gist.github.com/stephband/f032a69c54f3a5d0ebf9
 // https://github.com/mdn/audio-buffer
-
-/*
-For the latency test, if you pass the following constraints to getUserMedia,
-you will get back latency around 20ms for a loopback call:
-
-var constraints = { audio: { optional: [{ echoCancellation: false }] } };
-
-getUserMedia(constraints, gotStreamCb, gotStreamFailedCb);
-*/
 
 'use strict';
 
 addTestSuite("AudioLoopbackTest", loopbackTest);
 
 function loopbackTest() {
-  doGetUserMedia({audio:true}, function(stream) {
+  var constraints = { audio: { optional: [{ echoCancellation: false }] } };
+  // var constraints = { audio: true };
+  doGetUserMedia(constraints, function(stream) {
     reportSuccess("getUserMedia succeeded.");
     // Create a new MediaStreamAudioSourceNode object, given a media stream.
     var sourceNode = audioContext.createMediaStreamSource(stream);
@@ -37,13 +28,16 @@ function loopbackTest() {
 }
 
 function checkLoopback(source) {
+  reportSuccess("Loopback audio succeeded.");
+  checkLatency(source);
+  /*
   trace("Speak into microphone and verify audio in loopback...");
   source.connect(audioContext.destination);
   setTimeout(function(){
     source.disconnect(audioContext.destination);
     reportSuccess("Loopback audio succeeded.");
     checkLatency(source);
-  }, 1000);
+  }, 1000); */
 }
 
 function checkLatency(source) {
@@ -78,9 +72,10 @@ function checkLatency(source) {
     var n = -1;
     if (frame > 0) {
       while (++n < len) {
-        if (Math.abs(inputData[n]) > threshold) {
+        var absLevel = Math.abs(inputData[n]);
+        if (absLevel > threshold) {
           index = len * frame + n - len;
-          trace("pulse detected at " + index);
+          trace("pulse detected at " + index + " (" + absLevel + ')');
           inputTimes.push(index);
           return;
         }
@@ -89,7 +84,9 @@ function checkLatency(source) {
 
   };
 
-  var threshold = 0.125;  // -18 dBFS
+  // var threshold = 0.125;  // -18 dBFS
+  var threshold = 0.1  ;  // -20 dBFS
+  // var threshold = 0.05  ;  // -26 dBFS
   var bufferLength = 16384;
 
   var scriptNode = audioContext.createScriptProcessor(bufferLength, 1, 1);
@@ -109,17 +106,37 @@ function checkLatency(source) {
 function checkLatencyFinish(outputTimes, inputTimes) {
   console.log(outputTimes, inputTimes);
 
-  if (inputTimes.length == 0) {
-    reportError("Latency measurement failed: no signal is detected.");
+  if (inputTimes.length != outputTimes.length) {
+    trace("Please try to increase the volume and try again.");
+    return reportFatal(
+      "Latency measurement failed: non-perfect signal detection.");
   }
 
-  if (outputTimes.length < inputTimes.length) {
-    reportError("Latency measurement failed: too many signals detected.");
+  var latencyTimes = [];
+  for (var i in inputTimes) {
+    latencyTimes.push(inputTimes[i] - outputTimes[i]);
+  }
+  console.log(latencyTimes);
+
+  var min = Math.min.apply(Math, latencyTimes);
+  var max = Math.max.apply(Math, latencyTimes);
+  var range = max - min;
+  console.log(min, max);
+  if (range > 128) {
+    trace("Latency range=" + range);
+    return reportFatal(
+      "Latency variation is too large. Please repeat the test.");
   }
 
-  if (outputTimes.length > inputTimes.length) {
-    reportError("Latency measurement failed: too few signals detected.");
+  var avg = 0;
+  for (var j in latencyTimes) {
+    avg += latencyTimes[j];
   }
+  avg = avg / latencyTimes.length;
+  trace("Average latency in samples=" + avg);
+  trace("Average latency in milliseconds="
+    + Math.round(avg / audioContext.sampleRate * 1000));
+
 
   // reportSuccess("Latency measurement succeeded.");
   testSuiteFinished();
