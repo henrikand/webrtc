@@ -37,7 +37,7 @@ function checkAudioStart(stream) {
   var processFunc = function(event) {
     var sampleRate = event.sampleRate;
     var inputBuffer = event.inputBuffer;
-    source.disconnect(scriptNode); 
+    source.disconnect(scriptNode);
     scriptNode.disconnect(audioContext.destination);
     stream.getAudioTracks()[0].stop();
     checkAudioFinish(inputBuffer);
